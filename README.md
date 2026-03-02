@@ -21,21 +21,24 @@ volatility and positive/negative drift can cluster.
 python3 monte_carlo_simulator.py --paths 10000 --steps 252 --s0 100 --seed 42
 ```
 
-Example output:
+## Matplotlib regime/volatility/price table
 
-```json
-{
-  "expected_terminal": 108.74,
-  "median_terminal": 105.89,
-  "p05_terminal": 63.28,
-  "p95_terminal": 166.14,
-  "worst_terminal": 32.91,
-  "best_terminal": 289.47,
-  "regimes": ["bull", "sideways", "bear"],
-  "paths": 10000,
-  "steps": 252
-}
+You can generate a matplotlib image containing a table with **step**, **regime**,
+**volatility**, and **price** for a selected simulation path:
+
+```bash
+python3 monte_carlo_simulator.py \
+  --paths 2000 \
+  --steps 126 \
+  --seed 7 \
+  --table-path-index 0 \
+  --plot-table-max-rows 40 \
+  --plot-table-output artifacts/path_table.png
 ```
+
+The JSON output includes `plot_table_output` when the image is created.
+
+> Note: this feature requires `matplotlib` to be installed in your Python environment.
 
 ## Customization
 

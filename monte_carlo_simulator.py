@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import importlib
 import json
 import math
 import random
@@ -134,6 +135,66 @@ def simulate_regime_switching_market(
     return SimulationResult(prices=prices, log_returns=log_returns, regimes=regime_states)
 
 
+def build_path_table(
+    result: SimulationResult,
+    regimes: Sequence[Regime],
+    path_index: int = 0,
+) -> List[List[str]]:
+    """Build a per-step table of regime, volatility, and price for one path."""
+    if path_index < 0 or path_index >= len(result.prices):
+        raise ValueError("path_index is out of range for the simulated paths.")
+
+    rows: List[List[str]] = [["step", "regime", "volatility", "price"]]
+    for step, regime_idx in enumerate(result.regimes[path_index]):
+        regime = regimes[regime_idx]
+        price = result.prices[path_index][step + 1]
+        rows.append([str(step + 1), regime.name, f"{regime.vol:.4f}", f"{price:.4f}"])
+    return rows
+
+
+def save_path_table_plot(
+    result: SimulationResult,
+    regimes: Sequence[Regime],
+    path_index: int,
+    output_path: str,
+    max_rows: int = 50,
+) -> str:
+    """Save a matplotlib table for one simulated path."""
+    if importlib.util.find_spec("matplotlib") is None:
+        raise RuntimeError(
+            "matplotlib is not installed. Install it to use --plot-table-output."
+        )
+
+    matplotlib = importlib.import_module("matplotlib")
+    matplotlib.use("Agg")
+    plt = importlib.import_module("matplotlib.pyplot")
+
+    rows = build_path_table(result, regimes, path_index=path_index)
+    header = rows[0]
+    body = rows[1 : max_rows + 1]
+
+    fig_height = max(4, min(14, 1 + len(body) * 0.30))
+    fig, ax = plt.subplots(figsize=(10, fig_height))
+    ax.axis("off")
+
+    table = ax.table(cellText=body, colLabels=header, loc="center")
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.2)
+
+    shown = len(body)
+    ax.set_title(
+        f"Path {path_index} regime/volatility/price table (showing {shown} of {len(rows)-1} steps)",
+        fontsize=11,
+        pad=12,
+    )
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
 DEFAULT_REGIMES: List[Regime] = [
     Regime(name="bull", drift=0.12, vol=0.15),
     Regime(name="sideways", drift=0.04, vol=0.20),
@@ -156,6 +217,19 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dt", type=float, default=1 / 252, help="Step size in years")
     parser.add_argument("--s0", type=float, default=100.0, help="Initial asset price")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--table-path-index", type=int, default=0, help="Path index used for table output")
+    parser.add_argument(
+        "--plot-table-output",
+        type=str,
+        default="",
+        help="Optional output image path for matplotlib table with step/regime/volatility/price",
+    )
+    parser.add_argument(
+        "--plot-table-max-rows",
+        type=int,
+        default=50,
+        help="Maximum number of rows shown in the matplotlib table image",
+    )
     return parser
 
 
@@ -178,6 +252,19 @@ def main() -> None:
     output["regimes"] = [r.name for r in DEFAULT_REGIMES]
     output["paths"] = args.paths
     output["steps"] = args.steps
+
+    if args.plot_table_max_rows <= 0:
+        raise ValueError("--plot-table-max-rows must be a positive integer.")
+
+    if args.plot_table_output:
+        image_path = save_path_table_plot(
+            result=result,
+            regimes=DEFAULT_REGIMES,
+            path_index=args.table_path_index,
+            output_path=args.plot_table_output,
+            max_rows=args.plot_table_max_rows,
+        )
+        output["plot_table_output"] = image_path
 
     print(json.dumps(output, indent=2))
 
